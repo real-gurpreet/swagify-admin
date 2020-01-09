@@ -1,0 +1,97 @@
+FROM ubuntu:18.04
+
+MAINTAINER Laxman <laxman@chrishansolutions.com>
+
+# Let the conatiner know that there is no tty
+ARG DEBIAN_FRONTEND=noninteractive
+
+ENV IMAGE_PHP_VER=7.4
+ENV PROJ_DIRNAME=swagify-admin
+
+#Update Software Packages
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends apt-utils && \
+    apt-get install -y software-properties-common && \
+    apt-get install -y language-pack-en-base && \
+    LANG=C.UTF-8 add-apt-repository ppa:ondrej/php
+
+#Install Common Software
+RUN apt-get install -y nano git curl wget dialog net-tools gnupg2 ca-certificates lsb-release
+
+#For stable Nginx
+RUN echo "deb http://nginx.org/packages/ubuntu `lsb_release -cs` nginx" \
+    | tee /etc/apt/sources.list.d/nginx.list
+RUN curl -fsSL https://nginx.org/keys/nginx_signing.key | apt-key add -
+RUN apt-key fingerprint ABF5BD827BD9BF62
+
+#Install Nginx
+RUN apt-get update
+RUN apt-get install -y nginx
+
+#Install PHP with extension
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    apt-get install -y php${IMAGE_PHP_VER}-fpm \
+    php${IMAGE_PHP_VER}-json \
+    php${IMAGE_PHP_VER}-bcmath \
+    php${IMAGE_PHP_VER}-cli \
+    php${IMAGE_PHP_VER}-bz2 \
+    php${IMAGE_PHP_VER}-curl \
+    php${IMAGE_PHP_VER}-gd \
+    php${IMAGE_PHP_VER}-intl \
+    php${IMAGE_PHP_VER}-mbstring \
+    php${IMAGE_PHP_VER}-readline \
+    php${IMAGE_PHP_VER}-zip \
+    php${IMAGE_PHP_VER}-opcache \
+    php${IMAGE_PHP_VER}-tokenizer \
+    php${IMAGE_PHP_VER}-mysql \
+    php${IMAGE_PHP_VER}-xml \
+    php${IMAGE_PHP_VER}-common
+
+#RUN PHP with Nginx
+# Remove the default Nginx configuration file
+RUN rm -Rf /etc/nginx/sites-enabled/default
+RUN rm -Rf /etc/nginx/conf.d/*
+
+# Copy a configuration file from the current directory
+ADD docker/nginx/default.conf /etc/nginx/conf.d/
+ADD docker/nginx/nginx.conf /etc/nginx
+ADD docker/php/php.ini /etc/php/${IMAGE_PHP_VER}/fpm/
+
+# Install Composer
+RUN curl -sS https://getcomposer.org/installer | php && \
+    mv composer.phar /usr/local/bin/composer
+
+#Install NODE
+RUN curl -sL https://deb.nodesource.com/setup_12.x | bash
+RUN apt-get install -y nodejs
+
+#Clean Unwanted
+RUN apt-get remove --purge -y software-properties-common && \
+    apt-get purge && \
+    apt-get autoremove -y && \
+    apt-get clean && \
+    apt-get autoclean
+
+
+#Define Volume and Directory
+RUN mkdir ~/.ssh && touch ~/.ssh/known_hosts && ssh-keyscan github.com >> ~/.ssh/known_hosts
+RUN mkdir -p /opt/${PROJ_DIRNAME}
+
+
+VOLUME  /opt/${PROJ_DIRNAME}
+VOLUME  /etc/config
+WORKDIR /opt/${PROJ_DIRNAME}
+
+# Setup the run script
+ADD /docker/script/run.sh /run.sh
+RUN chmod 755 /*.sh
+
+#Set Permissions
+#RUN chown -Rf :www-data /opt/${PROJ_DIRNAME}
+#RUN chmod -R 775 /opt/${PROJ_DIRNAME}/app/storage
+
+# Expose Ports
+EXPOSE 9000
+
+CMD ["/run.sh"]
